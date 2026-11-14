@@ -32,7 +32,7 @@ K_ELO, HFA = 30.0, 60.0
 SEMILLAS, OCULTO, DROPOUT, EPOCAS, LOTE = 5, 64, 0.10, 25, 1024
 
 
-def leer():
+def leer(corte=CORTE):
     if not os.path.exists(CSV):
         os.makedirs(os.path.dirname(os.path.dirname(CSV)), exist_ok=True)
         subprocess.run(['git', 'clone', '-q', '--depth', '1', 'https://github.com/martj42/international_results',
@@ -44,7 +44,7 @@ def leer():
             gh, ga = int(r['home_score']), int(r['away_score'])
         except ValueError:
             continue
-        if f < CORTE and f.year >= 1950:
+        if f < corte and f.year >= 1950:
             filas.append((f, r['home_team'], r['away_team'], gh, ga, 0 if r['neutral'].upper() == 'TRUE' else 1))
     filas.sort(key=lambda x: x[0])
     return filas
