@@ -1,0 +1,22 @@
+{
+ "Liga 1 Perú 2026": {
+  "base": {
+   "xi": 0.03,
+   "ridge": 16.0,
+   "ridge_h": 8.0
+  },
+  "alpha": 0.75,
+  "w": 0.75,
+  "deep": "cero"
+ },
+ "Mundial 2026": {
+  "base": {
+   "xi": 0.03,
+   "ridge": 4.0,
+   "ridge_h": 10000.0
+  },
+  "alpha": 0.75,
+  "w": 0.25,
+  "deep": "cero"
+ }
+}
