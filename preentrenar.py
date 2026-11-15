@@ -26,6 +26,7 @@ from nucleo import Liga, Partido, elo_delta
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CSV = os.path.join(AQUI, 'datos_externos', 'international_results', 'results.csv')
+EXTRA = os.path.join(AQUI, 'datos_extra_selecciones.csv')
 CORTE = date(2026, 6, 11)
 ANIO_INI, ANIO_VAL = 1994, 2024
 K_ELO, HFA = 30.0, 60.0
@@ -37,8 +38,15 @@ def leer(corte=CORTE):
         os.makedirs(os.path.dirname(os.path.dirname(CSV)), exist_ok=True)
         subprocess.run(['git', 'clone', '-q', '--depth', '1', 'https://github.com/martj42/international_results',
                         os.path.dirname(CSV)], check=True)
-    filas = []
-    for r in csv.DictReader(open(CSV, encoding='utf-8')):
+    filas, vistos = [], set()
+    registros = list(csv.DictReader(open(CSV, encoding='utf-8')))
+    if os.path.exists(EXTRA):          # resultados recientes cargados a mano, aún no publicados en el histórico
+        registros += list(csv.DictReader(open(EXTRA, encoding='utf-8')))
+    for r in registros:
+        clave = (r['date'], r['home_team'], r['away_team'])
+        if clave in vistos:
+            continue
+        vistos.add(clave)
         try:
             f = date.fromisoformat(r['date'])
             gh, ga = int(r['home_score']), int(r['away_score'])
