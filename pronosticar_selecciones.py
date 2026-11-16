@@ -1,5 +1,5 @@
 """
-PRONÓSTICO DE PARTIDOS DE SELECCIONES (p. ej. UEFA Nations League) con el ensamble 50/50:
+PRONÓSTICO DE PARTIDOS DE SELECCIONES (p. ej. UEFA Nations League) con el ensamble 75/25:
   - red neuronal preentrenada (modelo_deep, modo 'cero') sobre el año en curso, y
   - modelo estadístico mejorado ajustado con los partidos internacionales desde 2024-07.
 
@@ -25,7 +25,11 @@ Croatia-Czech Republic;Spain-England;Faroe Islands-Moldova;Kazakhstan-Slovakia;I
 Lithuania-Liechtenstein;Estonia-Bulgaria;Germany-Netherlands;Switzerland-Scotland;Greece-Serbia;
 North Macedonia-Slovenia;Gibraltar-Malta;Denmark-Norway;Wales-Portugal;Ukraine*-Georgia;Hungary-Northern Ireland;
 Israel*-Austria;Republic of Ireland-Kosovo;Bosnia and Herzegovina-Romania;Poland-Sweden"""
-HP_SEL = mm.HP(xi=0.001, ridge=8.0, ridge_h=1e4, alpha=0.5)     # xi por día (≈0.03 por mes)
+# Elegidos con partidos de ene a 10-jun-2026 y comprobados del 11-jun en adelante (mejorar_selecciones.py)
+HP_SEL = mm.HP(xi=0.0005, ridge=4.0, ridge_h=1e4, alpha=0.75)   # xi por día
+PESO_EST = 0.75                      # peso del modelo estadístico en el ensamble
+CORR_LOCAL, CORR_VISITA = 1.033, 1.037   # corrección de goles ajustada en el periodo de elección
+FACTOR_ULTIMA_JORNADA = 1.08         # goles extra en la última jornada de la Nations League (ediciones 2018-2024)
 
 
 def preparar(filas, hasta):
@@ -60,7 +64,12 @@ def predecir(filas, hasta, cruces):
     test = [Partido(t, ix[h], ix[a], 0, 0, hadv, '') for h, a, hadv in cruces]
     est = mm.predecir(l_est, l_est.partidos, test, t, HP_SEL)
     deep = D.predecir(l_deep, l_deep.partidos, test, t, modo='cero')
-    return est, deep, [0.5 * e + 0.5 * d for e, d in zip(est, deep)]
+    i, j = np.indices(est[0].shape)
+    ens = []
+    for e, d in zip(est, deep):
+        W = (PESO_EST * e + (1 - PESO_EST) * d) * CORR_LOCAL ** i * CORR_VISITA ** j
+        ens.append(W / W.sum())
+    return est, deep, ens
 
 
 def ajustar_goles(M, factor):
@@ -103,12 +112,12 @@ def fundir_con_cuotas(M, c1, cx, c2, c_mas, c_menos, peso=0.7):
 def validar(filas):
     """Walk-forward por día desde el corte del preentrenamiento: todo lo evaluado es fuera de muestra."""
     dias = sorted({f[0] for f in filas if f[0] >= CORTE})
-    acum = {'Estadístico': [], 'Red neuronal': [], 'Ensamble 50/50': []}
+    acum = {'Estadístico': [], 'Red neuronal': [], 'Ensamble': []}
     reales = []
     for d in dias:
         hoy = [f for f in filas if f[0] == d]
         e, n, m = predecir(filas, d, [(f[1], f[2], f[5]) for f in hoy])
-        acum['Estadístico'] += e; acum['Red neuronal'] += n; acum['Ensamble 50/50'] += m
+        acum['Estadístico'] += e; acum['Red neuronal'] += n; acum['Ensamble'] += m
         reales += [(f[3], f[4]) for f in hoy]
     print(f'Validación fuera de muestra: {len(reales)} partidos internacionales del {dias[0]} al {dias[-1]}')
     print(f"{'Modelo':<16}{'1X2':>7}{'Exacto':>9}{'Top-3':>8}{'LogLoss':>9}{'RPS':>7}")
@@ -116,10 +125,10 @@ def validar(filas):
         m = metricas(v, reales)
         print(f"{k:<16}{m['acc']:>7.1%}{m['exacto']:>9.1%}{m['top3']:>8.1%}{m['logloss']:>9.3f}{m['rps']:>7.3f}")
     # mercado "más/menos de 2.5" del ensamble
-    i, j = np.indices(acum['Ensamble 50/50'][0].shape)
-    po = np.array([M[i + j > 2.5].sum() for M in acum['Ensamble 50/50']]); yo = np.array([gh + ga > 2.5 for gh, ga in reales])
+    i, j = np.indices(acum['Ensamble'][0].shape)
+    po = np.array([M[i + j > 2.5].sum() for M in acum['Ensamble']]); yo = np.array([gh + ga > 2.5 for gh, ga in reales])
     print(f'Más/menos de 2.5 goles (ensamble): acierto {((po > 0.5) == yo).mean():.1%}; frecuencia real de más de 2.5: {yo.mean():.1%}')
-    P = np.array([probs_1x2(M) for M in acum['Ensamble 50/50']]); y = np.array([0 if a > b else 1 if a == b else 2 for a, b in reales])
+    P = np.array([probs_1x2(M) for M in acum['Ensamble']]); y = np.array([0 if a > b else 1 if a == b else 2 for a, b in reales])
     for lo, hi in ((0.0, 0.5), (0.5, 0.65), (0.65, 0.8), (0.8, 1.01)):
         s = (P.max(1) >= lo) & (P.max(1) < hi)
         if s.any():
@@ -130,7 +139,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--partidos')
     ap.add_argument('--validar', action='store_true')
-    ap.add_argument('--goles', type=float, default=1.0, help='factor de goles, p. ej. 1.12 en la última jornada')
+    ap.add_argument('--goles', type=float, default=1.0, help='factor de goles, p. ej. 1.08 en la última jornada de la Nations League')
     a = ap.parse_args()
     filas = leer(date(2100, 1, 1))
     if a.validar:
