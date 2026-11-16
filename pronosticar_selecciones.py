@@ -63,6 +63,15 @@ def predecir(filas, hasta, cruces):
     return est, deep, [0.5 * e + 0.5 * d for e, d in zip(est, deep)]
 
 
+def ajustar_goles(M, factor):
+    """Multiplica los goles esperados de ambos equipos por `factor` (inclinación exponencial de la matriz).
+    Uso previsto: última jornada de la Nations League, donde históricamente hay ~15 % más goles
+    (2.76 contra 2.39 por partido en las ediciones 2018-2024)."""
+    i, j = np.indices(M.shape)
+    W = M * factor ** (i + j)
+    return W / W.sum()
+
+
 def validar(filas):
     """Walk-forward por día desde el corte del preentrenamiento: todo lo evaluado es fuera de muestra."""
     dias = sorted({f[0] for f in filas if f[0] >= CORTE})
@@ -93,6 +102,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--partidos')
     ap.add_argument('--validar', action='store_true')
+    ap.add_argument('--goles', type=float, default=1.0, help='factor de goles, p. ej. 1.12 en la última jornada')
     a = ap.parse_args()
     filas = leer(date(2100, 1, 1))
     if a.validar:
@@ -103,6 +113,7 @@ def main():
         cruces.append((h.rstrip('*'), v, 0 if h.endswith('*') else 1))
     hoy = date.today()
     est, deep, ens = predecir(filas, hoy, cruces)
+    ens = [ajustar_goles(M, a.goles) for M in ens]
     print(f'Datos hasta {filas[-1][0]} · pronóstico con fecha {hoy}\n')
     print(f"{'Partido':<36}{'L':>5}{'E':>5}{'V':>5}  {'Marcador':<9}{'Goles':>6}{'+2.5':>6}   Estad. L/E/V   Red L/E/V")
     i, j = np.indices(ens[0].shape)
