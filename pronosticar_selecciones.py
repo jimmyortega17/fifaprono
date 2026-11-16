@@ -72,6 +72,34 @@ def ajustar_goles(M, factor):
     return W / W.sum()
 
 
+def sin_margen(cuotas):
+    p = 1 / np.asarray(cuotas, float)
+    return p / p.sum()
+
+
+def fundir_con_cuotas(M, c1, cx, c2, c_mas, c_menos, peso=0.7):
+    """Combina la matriz del modelo con las cuotas de la casa (ganador y más/menos 2.5).
+    Las cuotas ya incorporan alineaciones, bajas y lo que se juega cada equipo, que el modelo no ve.
+    Objetivo = media geométrica (peso para la casa); la matriz se inclina hasta reproducirlo, de modo que
+    marcadores, doble oportunidad y rangos de goles quedan coherentes con ese objetivo."""
+    from scipy.optimize import least_squares
+    i, j = np.indices(M.shape)
+    mezcla = lambda pm, pc: (lambda q: q / q.sum())(pm ** (1 - peso) * pc ** peso)
+    obj = mezcla(probs_1x2(M), sin_margen([c1, cx, c2]))
+    mas = M[i + j > 2.5].sum()
+    obj_mas = mezcla(np.array([mas, 1 - mas]), sin_margen([c_mas, c_menos]))[0]
+
+    def inclinar(p):
+        W = M * np.exp(p[0] * i + p[1] * j + p[2] * (i == j))
+        return W / W.sum()
+
+    def resid(p):
+        W = inclinar(p)
+        q = probs_1x2(W)
+        return [q[0] - obj[0], q[2] - obj[2], W[i + j > 2.5].sum() - obj_mas]
+    return inclinar(least_squares(resid, [0.0, 0.0, 0.0]).x)
+
+
 def validar(filas):
     """Walk-forward por día desde el corte del preentrenamiento: todo lo evaluado es fuera de muestra."""
     dias = sorted({f[0] for f in filas if f[0] >= CORTE})
